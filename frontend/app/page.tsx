@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { ArrowRight, Braces, Gauge, GitMerge, Layers, Radio, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowRight, Braces, Gauge, GitMerge, Layers, Menu, Radio, ShieldCheck, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 
 // ---------------------------------------------------------------------------
@@ -17,20 +17,10 @@ function LiveMergeDemo() {
   const [synced, setSynced] = useState(false);
 
   useEffect(() => {
-    let raf: ReturnType<typeof setInterval>;
-    let resetTimer: ReturnType<typeof setTimeout>;
-
-    raf = setInterval(() => {
-      setA((prev) => {
-        const next = Math.min(prev + 1, LINE_A.length);
-        return next;
-      });
-      setB((prev) => {
-        const next = Math.min(prev + 1, LINE_B.length);
-        return next;
-      });
+    const raf = setInterval(() => {
+      setA((prev) => Math.min(prev + 1, LINE_A.length));
+      setB((prev) => Math.min(prev + 1, LINE_B.length));
     }, 55);
-
     return () => clearInterval(raf);
   }, []);
 
@@ -170,35 +160,47 @@ const steps = [
   },
 ];
 
-const stack = [
-  "Next.js",
-  "Yjs (CRDT)",
-  "Socket.io",
-  "Redis Pub/Sub",
-  "PostgreSQL",
-  "Docker · ECS",
+const stack = ["Next.js", "Yjs (CRDT)", "Socket.io", "Redis Pub/Sub", "PostgreSQL", "Docker · ECS"];
+
+const navLinks = [
+  { href: "#merge", label: "Merge" },
+  { href: "#features", label: "Features" },
+  { href: "#stack", label: "Stack" },
 ];
 
-export default function HomePage() {
+function Logo() {
   return (
-    <main
-      className="min-h-screen bg-[#080A0F] text-[#ECEEF3]"
-      style={{ fontFamily: "var(--font-body)" }}
-    >
+    <Link href="/" className="flex items-center gap-2 text-sm font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
+      <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#232838] bg-[#12151D]">
+        <Braces className="h-4 w-4 text-[#F2994A]" />
+      </span>
+      <span>
+        <span className="text-[#F2994A]">collab</span>
+        <span className="text-[#868C9C]">/</span>
+        <span className="text-[#2DD4BF]">code</span>
+      </span>
+    </Link>
+  );
+}
+
+export default function HomePage() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <main className="min-h-screen bg-[#080A0F] text-[#ECEEF3]" style={{ fontFamily: "var(--font-body)" }}>
       <div className="sticky top-0 z-40 border-b border-[#181C26]/90 bg-[#080A0F]/88 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 sm:px-8">
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#232838] bg-[#12151D]">
-              <Braces className="h-4 w-4 text-[#F2994A]" />
-            </span>
-            <span><span className="text-[#F2994A]">collab</span><span className="text-[#868C9C]">/</span><span className="text-[#2DD4BF]">code</span></span>
-          </Link>
+          <Logo />
+
           <div className="hidden items-center gap-6 text-sm text-[#868C9C] md:flex">
-            <a href="#merge" className="transition hover:text-[#ECEEF3]">Merge</a>
-            <a href="#features" className="transition hover:text-[#ECEEF3]">Features</a>
-            <a href="#stack" className="transition hover:text-[#ECEEF3]">Stack</a>
+            {navLinks.map((link) => (
+              <a key={link.href} href={link.href} className="transition hover:text-[#ECEEF3]">
+                {link.label}
+              </a>
+            ))}
           </div>
-          <div className="flex items-center gap-3 text-sm">
+
+          <div className="hidden items-center gap-3 text-sm md:flex">
             <Link href="/login" className="text-[#868C9C] transition hover:text-[#ECEEF3]">
               Log in
             </Link>
@@ -209,70 +211,124 @@ export default function HomePage() {
               Start
             </Link>
           </div>
+
+          <button
+            aria-label="Toggle menu"
+            onClick={() => setMobileOpen((v) => !v)}
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-[#232838] text-[#AEB4C2] md:hidden"
+          >
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
         </nav>
+
+        <AnimatePresence>
+          {mobileOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden border-t border-[#181C26] md:hidden"
+            >
+              <div className="flex flex-col gap-1 px-6 py-4 sm:px-8">
+                {navLinks.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-md px-2 py-2.5 text-sm text-[#AEB4C2] transition hover:bg-[#12151D] hover:text-[#ECEEF3]"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+                <div className="mt-2 flex items-center gap-3 border-t border-[#181C26] pt-4">
+                  <Link href="/login" className="flex-1 rounded-md border border-[#232838] px-4 py-2.5 text-center text-sm text-[#AEB4C2]">
+                    Log in
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="flex-1 rounded-md bg-[#F2994A] px-4 py-2.5 text-center text-sm font-semibold text-[#0B0D12]"
+                  >
+                    Start
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
-
         {/* Hero */}
-        <section className="grid gap-12 py-16 lg:grid-cols-[1fr_460px] lg:items-center lg:py-24">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <p
-              className="mb-5 inline-flex items-center gap-2 rounded-md border border-[#232838] bg-[#12151D] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-[#AEB4C2]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              <Sparkles className="h-3.5 w-3.5 text-[#F2994A]" />
-              Real-time collaborative editor
-            </p>
-            <h1
-              className="text-[2.75rem] font-semibold leading-[1.08] tracking-tight sm:text-6xl"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Type at the same time.
-              <br />
-              Nothing gets lost.
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-[#AEB4C2]">
-              Two people can edit the same line at once. The document merges every
-              keystroke automatically, so neither edit ever overwrites the other —
-              no locking, no "you're viewing an outdated version" banners.
-            </p>
-            <div className="mt-9 flex flex-wrap items-center gap-4">
-              <Link
-                href="/signup"
-                className="flex items-center gap-2 rounded-md bg-[#F2994A] px-5 py-3 text-sm font-semibold text-[#0B0D12] shadow-[0_18px_45px_-24px_rgba(242,153,74,0.9)] transition hover:bg-[#f5a862]"
+        <section className="dot-grid relative -mx-6 overflow-hidden px-6 py-16 sm:-mx-8 sm:px-8 lg:py-24">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_78%_20%,rgba(242,153,74,0.10),transparent_70%),radial-gradient(45%_45%_at_100%_60%,rgba(45,212,191,0.08),transparent_70%),linear-gradient(to_bottom,transparent,#080A0F_92%)]" />
+
+          <div className="relative grid gap-12 lg:grid-cols-[1fr_460px] lg:items-center">
+            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+              <p
+                className="mb-5 inline-flex items-center gap-2 rounded-md border border-[#232838] bg-[#12151D] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-[#AEB4C2]"
+                style={{ fontFamily: "var(--font-mono)" }}
               >
-                Create a room <ArrowRight className="h-4 w-4" />
-              </Link>
-              <a href="#merge" className="text-sm text-[#868C9C] underline decoration-[#232838] underline-offset-4 transition hover:text-[#ECEEF3]">
-                See how merging works
-              </a>
-            </div>
+                <Sparkles className="h-3.5 w-3.5 text-[#F2994A]" />
+                Real-time collaborative editor
+              </p>
+              <h1
+                className="text-[2.75rem] font-semibold leading-[1.08] tracking-tight sm:text-6xl"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Type at the same time.
+                <br />
+                Nothing gets lost.
+              </h1>
+              <p className="mt-6 max-w-xl text-base leading-7 text-[#AEB4C2]">
+                Two people can edit the same line at once. The document merges every
+                keystroke automatically, so neither edit ever overwrites the other —
+                no locking, no &ldquo;you&apos;re viewing an outdated version&rdquo; banners.
+              </p>
+              <div className="mt-9 flex flex-wrap items-center gap-4">
+                <Link
+                  href="/signup"
+                  className="flex items-center gap-2 rounded-md bg-[#F2994A] px-5 py-3 text-sm font-semibold text-[#0B0D12] shadow-[0_18px_45px_-24px_rgba(242,153,74,0.9)] transition hover:bg-[#f5a862]"
+                >
+                  Create a room <ArrowRight className="h-4 w-4" />
+                </Link>
+                <a href="#merge" className="text-sm text-[#868C9C] underline decoration-[#232838] underline-offset-4 transition hover:text-[#ECEEF3]">
+                  See how merging works
+                </a>
+              </div>
 
-            <div id="stack" className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#181C26] pt-6">
-              <span className="text-[10px] uppercase tracking-[0.14em] text-[#3A4152]" style={{ fontFamily: "var(--font-mono)" }}>
-                Built on
-              </span>
-              {stack.map((item) => (
-                <span key={item} className="text-xs text-[#868C9C]" style={{ fontFamily: "var(--font-mono)" }}>
-                  {item}
+              <div id="stack" className="mt-10 border-t border-[#181C26] pt-6">
+                <span className="mb-3 block text-[10px] uppercase tracking-[0.14em] text-[#3A4152]" style={{ fontFamily: "var(--font-mono)" }}>
+                  Built on
                 </span>
-              ))}
-            </div>
-          </motion.div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {stack.map((item) => (
+                    <span
+                      key={item}
+                      className="rounded-md border border-[#232838] bg-[#12151D] px-2.5 py-1 text-[11px] text-[#AEB4C2]"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="rounded-lg border border-[#232838] bg-[#0E1117] p-3 shadow-[0_40px_90px_-55px_rgba(45,212,191,0.55)]"
-          >
-            <LiveMergeDemo />
-          </motion.div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="relative rounded-lg border border-[#232838] bg-[#0E1117] p-3 shadow-[0_40px_90px_-55px_rgba(45,212,191,0.55)]"
+            >
+              <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[28px] bg-[radial-gradient(closest-side,rgba(242,153,74,0.12),transparent)] blur-2xl" />
+              <LiveMergeDemo />
+            </motion.div>
+          </div>
         </section>
 
         {/* How it works */}
-        <section id="features" className="border-t border-[#181C26] py-16">
+        <section id="how" className="border-t border-[#181C26] py-16">
           <p className="mb-2 text-[11px] uppercase tracking-[0.18em] text-[#868C9C]" style={{ fontFamily: "var(--font-mono)" }}>
             How it works
           </p>
@@ -309,20 +365,15 @@ export default function HomePage() {
           <h2 className="mb-8 max-w-xl text-2xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
             Each edit remembers its position relative to the others — not just its row and column.
           </h2>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
             <MergeDiagram />
           </motion.div>
         </section>
 
         {/* Features */}
-        <section className="border-t border-[#181C26] py-16">
+        <section id="features" className="border-t border-[#181C26] py-16">
           <p className="mb-2 text-[11px] uppercase tracking-[0.18em] text-[#868C9C]" style={{ fontFamily: "var(--font-mono)" }}>
-            What's handled for you
+            What&apos;s handled for you
           </p>
           <h2 className="mb-10 max-w-xl text-2xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
             The parts of real-time collaboration that are easy to get wrong.
@@ -335,9 +386,9 @@ export default function HomePage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: i * 0.06 }}
-                className="rounded-lg border border-[#232838] bg-[#12151D] p-5 transition hover:border-[#F2994A]/45 hover:bg-[#171B24]"
+                className="group rounded-lg border border-[#232838] bg-[#12151D] p-5 transition hover:border-[#F2994A]/45 hover:bg-[#171B24]"
               >
-                <feature.icon className="mb-4 h-5 w-5 text-[#F2994A]" />
+                <feature.icon className="mb-4 h-5 w-5 text-[#F2994A] transition group-hover:scale-110" />
                 <h3 className="text-base font-semibold" style={{ fontFamily: "var(--font-display)" }}>
                   {feature.title}
                 </h3>
@@ -349,19 +400,22 @@ export default function HomePage() {
 
         {/* Closing CTA */}
         <section className="border-t border-[#181C26] py-16">
-          <div className="rounded-lg border border-[#232838] bg-[#12151D] px-8 py-12 text-center shadow-[0_35px_90px_-70px_rgba(242,153,74,0.8)]">
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ fontFamily: "var(--font-display)" }}>
-              Open a room. Send the link. Start typing.
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#868C9C]">
-              No installs, no account required for guests — just a link and a shared editor.
-            </p>
-            <Link
-              href="/signup"
-              className="mt-7 inline-flex items-center gap-2 rounded-md bg-[#F2994A] px-5 py-3 text-sm font-medium text-[#0B0D12] transition hover:bg-[#f5a862]"
-            >
-              Create a room <ArrowRight className="h-4 w-4" />
-            </Link>
+          <div className="relative overflow-hidden rounded-lg border border-[#232838] bg-[#12151D] px-8 py-12 text-center shadow-[0_35px_90px_-70px_rgba(242,153,74,0.8)]">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_60%_at_50%_0%,rgba(45,212,191,0.08),transparent_70%)]" />
+            <div className="relative">
+              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ fontFamily: "var(--font-display)" }}>
+                Open a room. Send the link. Start typing.
+              </h2>
+              <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#868C9C]">
+                No installs, no account required for guests — just a link and a shared editor.
+              </p>
+              <Link
+                href="/signup"
+                className="mt-7 inline-flex items-center gap-2 rounded-md bg-[#F2994A] px-5 py-3 text-sm font-medium text-[#0B0D12] transition hover:bg-[#f5a862]"
+              >
+                Create a room <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </section>
 

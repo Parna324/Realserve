@@ -62,3 +62,48 @@ CREATE INDEX IF NOT EXISTS idx_rooms_owner_id ON rooms(owner_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_room_member_marks_marked_by ON room_member_marks(marked_by);
 CREATE INDEX IF NOT EXISTS idx_documents_room_id ON documents(room_id);
+
+-- ── Time-Travel Playback: append-only update log ──────────────────────────────
+-- Every Yjs binary delta is persisted here so we can replay the edit history
+-- of any file up to an arbitrary point in time.
+--
+-- Design notes:
+--   • BIGSERIAL gives free monotonic ordering — replay uses ORDER BY id, not
+--     created_at, which is immune to clock skew between server instances.
+--   • client_id stores the author's display name so the timeline UI can
+--     colour-code each tick without joining back to users.
+--   • The table is bounded by the compaction mechanism in collaboration.ts:
+--     every COMPACTION_THRESHOLD inserts, the server writes a fresh
+--     yjs_state checkpoint to documents and prunes older rows here.
+
+ALTER TABLE documents
+  ADD COLUMN IF NOT EXISTS checkpoint_at TIMESTAMPTZ;
+-- Tracks *when* the current yjs_state snapshot was taken.
+-- Rows in document_updates with created_at < checkpoint_at are redundant
+-- and will be pruned by the next compaction cycle.
+
+CREATE TABLE IF NOT EXISTS document_updates (
+  -- Monotonic surrogate key — ORDER BY id is the correct replay order.
+  id          BIGSERIAL    PRIMARY KEY,
+
+  -- Which file this update belongs to.  Cascade-deletes with the document.
+  file_id     UUID         NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+
+  -- Raw Yjs binary delta — opaque bytes, applied with Y.applyUpdate().
+  update_data BYTEA        NOT NULL,
+
+  -- Author display name captured at write time.  Stored denormalised so the
+  -- history timeline never needs a user-table join.
+  client_id   TEXT         NOT NULL,
+
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Core query pattern: "give me all updates for file X between two timestamps"
+CREATE INDEX IF NOT EXISTS idx_doc_updates_file_time
+  ON document_updates(file_id, created_at);
+
+-- Secondary pattern: "how many updates exist for file X?" (compaction trigger)
+CREATE INDEX IF NOT EXISTS idx_doc_updates_file_id
+  ON document_updates(file_id);
+

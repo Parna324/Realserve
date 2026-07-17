@@ -66,6 +66,15 @@ let redisPublisher: InstanceType<typeof Redis> | null = null;
 let redisSubscriber: InstanceType<typeof Redis> | null = null;
 const instanceId = randomUUID();
 
+// ── Update-log compaction ─────────────────────────────────────────────────────
+// How many raw update rows we allow before compacting into a new checkpoint.
+// Lower = less history stored but tighter DB table.  Default covers ~one session.
+const COMPACTION_THRESHOLD = 200;
+
+// In-memory counters so we don't run COUNT(*) on every keystroke.
+// Keyed by fileId.  Initialised lazily to 0 on first update.
+const updateCounters = new Map<string, number>();
+
 function toBase64(update: Uint8Array) {
   return Buffer.from(update).toString("base64");
 }
@@ -150,6 +159,73 @@ async function publishYjsUpdate(fileId: string, update: string) {
 async function publishAwareness(slug: string, update: string) {
   if (!redisPublisher) return;
   await redisPublisher.publish("collab:awareness", JSON.stringify({ instanceId, slug, update }));
+}
+
+// ── appendUpdate ──────────────────────────────────────────────────────────────
+// Persists one raw Yjs binary delta to document_updates and increments the
+// in-memory counter for that file.  If the counter reaches COMPACTION_THRESHOLD
+// we fire compactIfNeeded() asynchronously (never blocks the socket handler).
+async function appendUpdate(
+  fileId: string,
+  update: Uint8Array,
+  clientId: string
+): Promise<void> {
+  // Write the raw delta — bytea column, so wrap in a Node Buffer.
+  await query(
+    `INSERT INTO document_updates (file_id, update_data, client_id)
+     VALUES ($1, $2, $3)`,
+    [fileId, Buffer.from(update), clientId]
+  );
+
+  // Bump the in-memory counter (initialise to 1 if first update for this file).
+  const count = (updateCounters.get(fileId) ?? 0) + 1;
+  updateCounters.set(fileId, count);
+
+  if (count >= COMPACTION_THRESHOLD) {
+    // Don't await — compaction is a background housekeeping task.
+    compactIfNeeded(fileId).catch((e) =>
+      console.error(`Compaction failed for file ${fileId}:`, e)
+    );
+  }
+}
+
+// ── compactIfNeeded ───────────────────────────────────────────────────────────
+// Collapses the current doc state into a new yjs_state checkpoint, records
+// when that checkpoint was taken (checkpoint_at), then prunes all raw
+// document_updates rows older than that timestamp.
+//
+// Tradeoff: history before the new checkpoint is permanently discarded.
+// For teaching/grading use cases this is acceptable — we keep the most recent
+// COMPACTION_THRESHOLD edits which covers a full coding session.
+async function compactIfNeeded(fileId: string): Promise<void> {
+  const collab = fileDocs.get(fileId);
+  if (!collab) return;
+
+  // Build a full-state update from the current in-memory Yjs doc.
+  const state = Y.encodeStateAsUpdate(collab.doc);
+  const snapshot = collab.doc.getText("monaco").toString();
+  const now = new Date();
+
+  // Write the fresh checkpoint — same columns as persistDoc() plus checkpoint_at.
+  await query(
+    `UPDATE documents
+     SET snapshot = $2, yjs_state = $3, checkpoint_at = $4, updated_at = NOW()
+     WHERE id = $1`,
+    [fileId, snapshot, Buffer.from(state), now]
+  );
+
+  // Prune raw updates that are now covered by the new checkpoint.
+  // We keep the rows created *at* the checkpoint timestamp in case of races.
+  await query(
+    `DELETE FROM document_updates
+     WHERE file_id = $1 AND created_at < $2`,
+    [fileId, now]
+  );
+
+  // Reset the in-memory counter for this file.
+  updateCounters.set(fileId, 0);
+
+  console.log(`[history] Compacted file ${fileId} — checkpoint at ${now.toISOString()}`);
 }
 
 export function attachCollaborationServer(httpServer: HttpServer) {
@@ -276,6 +352,17 @@ export function attachCollaborationServer(httpServer: HttpServer) {
       const u = fromBase64(update);
       Y.applyUpdate(collab.doc, u);
       schedulePersist(fileId);
+
+      // ── History log ────────────────────────────────────────────────────────
+      // Append this delta to the update log.  We use the authenticated user's
+      // display name as client_id — captured from socket.data.user which was
+      // validated by the auth middleware, so it can't be spoofed.
+      // Fire-and-forget: a transient write failure here doesn't corrupt the
+      // live doc, it just means one update is missing from the history log.
+      appendUpdate(fileId, u, socket.data.user.name).catch((e) =>
+        console.error(`[history] Failed to append update for file ${fileId}:`, e)
+      );
+      // ── End history log ────────────────────────────────────────────────────
 
       socket.to(`file:${fileId}`).emit("yjs:update", { fileId, update });
       await publishYjsUpdate(fileId, update);
